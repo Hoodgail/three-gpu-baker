@@ -1,0 +1,105 @@
+{
+  "name": "three-gpu-baker",
+  "version": "1.0.0",
+  "description": "Progressive lightmap baking for Three.js with WebGPU, diffuse global illumination, ambient occlusion and light probes.",
+  "type": "module",
+  "license": "MIT",
+  "author": "Hoodgail Benjamin",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Hoodgail/three-gpu-baker.git"
+  },
+  "homepage": "https://hoodgail.github.io/three-gpu-baker/",
+  "bugs": "https://github.com/Hoodgail/three-gpu-baker/issues",
+  "sideEffects": false,
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist",
+    "native",
+    "LICENSE",
+    "README.md",
+    "docs",
+    "THIRD_PARTY_NOTICES.md"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./core": {
+      "types": "./dist/core/index.d.ts",
+      "import": "./dist/core/index.js"
+    },
+    "./gpu": {
+      "types": "./dist/gpu/index.d.ts",
+      "import": "./dist/gpu/index.js"
+    },
+    "./three": {
+      "types": "./dist/three/index.d.ts",
+      "import": "./dist/three/index.js"
+    },
+    "./io": {
+      "types": "./dist/io/index.d.ts",
+      "import": "./dist/io/index.js"
+    },
+    "./denoise": {
+      "types": "./dist/denoise/index.d.ts",
+      "import": "./dist/denoise/index.js"
+    },
+    "./node": {
+      "types": "./dist/node/OptixDenoiser.d.ts",
+      "import": "./dist/node/OptixDenoiser.js"
+    }
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit && tsc -p tsconfig.website.json",
+    "test": "npm run build && node --import tsx --test tests/*.test.ts tests/integration/*.test.ts",
+    "dev": "vite --host 127.0.0.1",
+    "docs:build": "vite build",
+    "docs:preview": "vite preview --host 127.0.0.1",
+    "format": "prettier --write src website examples tests scripts docs .github *.json *.md *.ts",
+    "format:check": "prettier --check src website examples tests scripts docs .github *.json *.md *.ts",
+    "prepack": "npm run build",
+    "check": "npm run typecheck && npm test && npm run format:check && npm run docs:build",
+    "example:cpu": "node --import tsx scripts/example.ts",
+    "test:gpu": "playwright test",
+    "package:check": "node --import tsx scripts/package-check.ts",
+    "examples:render": "node --import tsx scripts/render-examples.ts"
+  },
+  "peerDependencies": {
+    "three": "^0.186.0"
+  },
+  "devDependencies": {
+    "@fontsource/dm-sans": "^5.3.0",
+    "@fontsource/manrope": "^5.3.0",
+    "@playwright/test": "^1.63.0",
+    "@types/node": "^26.5.1",
+    "@types/three": "^0.186.0",
+    "@webgpu/types": "^0.1.72",
+    "marked": "^18.0.13",
+    "prettier": "^3.9.6",
+    "three": "0.186.0",
+    "tsx": "^4.23.13",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.0"
+  },
+  "keywords": [
+    "three.js",
+    "webgpu",
+    "tsl",
+    "lightmap",
+    "global-illumination",
+    "path-tracing"
+  ],
+  "bin": {
+    "three-gpu-baker-denoise": "./dist/node/cli.js"
+  }
+}

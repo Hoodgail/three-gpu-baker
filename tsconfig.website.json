@@ -1,0 +1,10 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "rootDir": ".",
+    "types": ["node", "@webgpu/types", "vite/client"]
+  },
+  "include": ["website/**/*.ts", "examples/**/*.ts", "vite.config.ts"],
+  "exclude": ["website/public"]
+}
