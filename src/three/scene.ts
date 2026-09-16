@@ -3,10 +3,12 @@ import * as T from 'three/webgpu';
 import { texture, vec3 } from 'three/tsl';
 import { srgbToLinear, geometricNormal, triangleArea } from '../core/math.js';
 
+export const uvAttribute = (channel: Types.UVChannel) => (channel === 0 ? 'uv' : `uv${channel}`);
+
 const wrapName = (x: T.Wrapping): Types.WrapMode =>
   x === T.RepeatWrapping ? 'repeat' : x === T.MirroredRepeatWrapping ? 'mirror' : 'clamp';
 /** Snapshot texture pixels as linear RGB. Sampling transformations remain explicit. */
-export async function extractTexture(map?: T.Texture | null) {
+export async function extractTexture(map?: T.Texture | null, sourceUVChannel: Types.UVChannel = 0) {
   if (!map) return undefined;
   if (
     'isCompressedTexture' in map ||
@@ -15,9 +17,9 @@ export async function extractTexture(map?: T.Texture | null) {
     'isDataArrayTexture' in map
   )
     throw new Error('Decode compressed/array/video textures to a static 2D texture before baking.');
-  if ((map.channel ?? 0) !== 0)
+  if ((map.channel ?? 0) !== sourceUVChannel)
     throw new Error(
-      'Albedo/emissive textures must use uv (channel 0); uv1 is reserved for the lightmap.',
+      `Albedo/emissive textures must use sourceUVChannel (${sourceUVChannel}); the lightmap channel is reserved.`,
     );
   if (map.matrixAutoUpdate) map.updateMatrix();
   const image = (map.image ?? map.source?.data) as {
@@ -99,7 +101,15 @@ export async function extractTexture(map?: T.Texture | null) {
  */
 export async function extractThreeScene(
   root: T.Object3D,
-  { signal }: { signal?: AbortSignal } = {},
+  {
+    signal,
+    sourceUVChannel = 0,
+    lightmapUVChannel = 1,
+  }: {
+    signal?: AbortSignal;
+    sourceUVChannel?: Types.UVChannel;
+    lightmapUVChannel?: Types.UVChannel;
+  } = {},
 ): Promise<Types.CoreScene> {
   root.updateWorldMatrix(true, true);
   if (root instanceof T.Scene && root.environment)
@@ -137,7 +147,7 @@ export async function extractThreeScene(
       );
     const tex = async (t?: T.Texture | null) => {
       if (!t) return undefined;
-      if (!textureCache.has(t)) textureCache.set(t, extractTexture(t));
+      if (!textureCache.has(t)) textureCache.set(t, extractTexture(t, sourceUVChannel));
       return textureCache.get(t);
     };
     const descriptor = {
@@ -167,7 +177,10 @@ export async function extractThreeScene(
   for (const object of objects) {
     signal?.throwIfAborted();
     if (object instanceof T.Light) {
-      const common = { color: object.color.toArray(), intensity: object.intensity };
+      const common = {
+        color: object.color.toArray(),
+        intensity: object.intensity,
+      };
       if (object instanceof T.AmbientLight) {
         for (let c = 0; c < 3; c++)
           environment[c] += (common.color[c] * common.intensity) / Math.PI;
@@ -229,8 +242,8 @@ export async function extractThreeScene(
     const geometry = object.geometry,
       position = geometry.getAttribute('position'),
       normal = geometry.getAttribute('normal'),
-      uv = geometry.getAttribute('uv'),
-      uv1 = geometry.getAttribute('uv1');
+      uv = geometry.getAttribute(uvAttribute(sourceUVChannel)),
+      uv1 = geometry.getAttribute(uvAttribute(lightmapUVChannel));
     if (!position) continue;
     const list = Array.isArray(object.material) ? object.material : [object.material],
       ids = [];
@@ -273,6 +286,14 @@ export async function extractThreeScene(
           ),
           material: mat,
           owner: `${object.uuid}:${instance}`,
+          source: {
+            mesh: object.uuid,
+            name: object.name,
+            geometry: geometry.uuid,
+            instance,
+            triangle: offset / 3,
+            vertices: vertices.slice(),
+          },
         };
         if (triangleArea(t) < 1e-12) continue; // Ignore degenerate export seam triangles.
         t.n = normal
@@ -372,25 +393,41 @@ export function createThreeModel(prepared: Types.PreparedScene) {
     for (const [key, array, size] of [
       ['position', position, 3],
       ['normal', normal, 3],
-      ['uv', uv, 2],
-      ['uv1', uv1, 2],
+      [uvAttribute(prepared.options.sourceUVChannel), uv, 2],
+      [uvAttribute(prepared.options.lightmapUVChannel), uv1, 2],
     ] as [string, number[], number][])
       geometry.setAttribute(key, new T.Float32BufferAttribute(array, size));
     const id = triangles[0].material ?? 0,
       material =
         prepared.sourceMaterials?.[id]?.clone() ?? materialFromDescriptor(prepared.materials[id]);
+    for (const key of ['map', 'emissiveMap'] as const) {
+      const surface = material as SurfaceMaterial;
+      if (surface[key]) {
+        surface[key] = surface[key]!.clone();
+        surface[key]!.channel = prepared.options.sourceUVChannel;
+      }
+    }
     if ('lightMap' in material) material.lightMap = null;
     if ('aoMap' in material) material.aoMap = null;
     const mesh = new T.Mesh(geometry, material);
     mesh.name = name;
-    mesh.userData.lightmap = { file: 'lightmaps.tlmb', texCoord: 1, units: 'irradiance-over-pi' };
+    mesh.userData.lightmap = {
+      file: 'lightmaps.tlmb',
+      texCoord: prepared.options.lightmapUVChannel,
+      units: 'irradiance-over-pi',
+    };
+    // Nonindexed output: each row maps three output vertices to original corners.
+    mesh.userData.geometryMappings = triangles.map((t, i) => ({
+      source: structuredClone(t.source),
+      outputVertices: [i * 3, i * 3 + 1, i * 3 + 2],
+    }));
     group.add(mesh);
   }
   group.userData.lightmap = {
     schema: 'three-lightmap-baker',
     version: 1,
     file: 'lightmaps.tlmb',
-    texCoord: 1,
+    texCoord: prepared.options.lightmapUVChannel,
   };
   return group;
 }
@@ -404,7 +441,7 @@ export function createLightmapTextures(result: Types.BakeResult) {
     }
     const t = new T.DataTexture(data, result.width, result.height, T.RGBAFormat, T.FloatType);
     t.colorSpace = T.LinearSRGBColorSpace;
-    t.channel = 1;
+    t.channel = Number(result.metadata.lightmapUVChannel ?? 1);
     t.flipY = false;
     t.generateMipmaps = false;
     t.minFilter = T.LinearFilter;
@@ -427,9 +464,13 @@ export function applyLightmaps(
 ) {
   root.traverse((o) => {
     if (!(o instanceof T.Mesh)) return;
-    if (!o.geometry.getAttribute('uv1'))
+    if (
+      !o.geometry.getAttribute(
+        uvAttribute(Number(result.metadata.lightmapUVChannel ?? 1) as Types.UVChannel),
+      )
+    )
       throw new Error(
-        'Apply to createModel() output or a model with the matching global uv1 atlas.',
+        'Apply to createModel() output or a model with the matching global lightmap UV atlas.',
       );
     const convert = (m: SurfaceMaterial) => {
       const out = new T.MeshBasicNodeMaterial({ side: m.side });

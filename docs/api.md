@@ -2,15 +2,15 @@
 
 The root entry exports the high-level classes, helpers, and public TypeScript types. Subpath imports expose focused modules.
 
-| Entry                       | Purpose                                                       |
-| --------------------------- | ------------------------------------------------------------- |
+| Entry             | Purpose                                                       |
+| ----------------- | ------------------------------------------------------------- |
 | `three-gpu-baker` | Baker, I/O, probes, denoisers, public types                   |
-| `…/core`                    | CPU transport, scheduler, scene preparation, geometry helpers |
-| `…/gpu`                     | TSL and native WebGPU backends, buffer layout                 |
-| `…/three`                   | Three.js adapters and model I/O                               |
-| `…/io`                      | TLMB, PFM, PNG, ZIP codecs                                    |
-| `…/denoise`                 | Spatial filter and loopback service adapter                   |
-| `…/node`                    | Offline native OptiX runner; Node only                        |
+| `…/core`          | CPU transport, scheduler, scene preparation, geometry helpers |
+| `…/gpu`           | TSL and native WebGPU backends, buffer layout                 |
+| `…/three`         | Three.js adapters and model I/O                               |
+| `…/io`            | TLMB, PFM, PNG, ZIP codecs                                    |
+| `…/denoise`       | Spatial filter and loopback service adapter                   |
+| `…/node`          | Offline native OptiX runner; Node only                        |
 
 ## LightmapBaker
 
@@ -55,3 +55,13 @@ Receiver albedo and emission are excluded from the irradiance map. Multiplying b
 `SpatialDenoiser` implements the `Denoiser` interface. `LightProbeGenerator` accepts a scene and exposes `generate(options)`. `ThreeSceneAdapter` implements `SceneAdapter<Object3D>`.
 
 See the generated `.d.ts` files for exact parameter and return types; declarations are built directly from the implementation.
+
+## UV preparation and geometry mappings
+
+`BakeOptions` includes `sourceUVChannel`, `lightmapUVChannel`, `uvMode`, `texelDensity`, `padding` and optional `atlasProvider`. See [configuration](configuration.md#uv-channels-and-modes) for exact semantics and xatlas setup.
+
+`baker.scene.geometryMappings` maps each prepared (BVH-ordered) triangle to its source. Each row has `triangle` and `source: { mesh, name?, geometry?, instance?, triangle, vertices }`. Core input uses `owner` (or `core`) and the input triangle index; `vertices` refers to its three local corners unless source provenance is supplied. Three input records the original indexed/nonindexed geometry vertex indices, original triangle offset, object UUID and instance. Mirrored winding is reflected in the order of `source.vertices`.
+
+Each output mesh from `createModel()` has `userData.geometryMappings`: rows containing the same `source` plus three `outputVertices` into that mesh's **nonindexed, world-space** geometry. Splits, material batches and BVH sorting can change vertex order and count. Never copy output UV arrays directly onto original indexed geometry: a source vertex can have multiple output UVs at seams, and instances can occupy different atlas regions. Use the detached model, or rebuild geometry using these per-corner mappings, duplicating vertices wherever UVs differ. The mappings are serializable and remain in model `userData` through glTF extras.
+
+`UVValidationError.diagnostics` and `validateLightmapUVs` expose mesh/triangle error details; successful preparation retains advisory diagnostics in `baker.scene.uvDiagnostics`. `createLightmapTextures` and `applyLightmaps` read `metadata.lightmapUVChannel` (defaulting to 1 for older results).

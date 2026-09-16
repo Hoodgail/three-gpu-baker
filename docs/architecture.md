@@ -31,7 +31,7 @@ Each dispatch must fence completed work before resolving. `reset` clears accumul
 
 ## Replace scene preparation
 
-Subclass `SceneCompiler` and override `compile(scene, options)`. Return a complete `PreparedScene` with a matching BVH triangle order, atlas and geometry buffer. This is the boundary for an external unwrap implementation, spatial cache, or specialized receiver selection.
+Subclass `SceneCompiler` and override `compile(scene, options)`. Return a complete `PreparedScene` (or a promise) with a matching BVH triangle order, atlas, geometry buffer, `geometryMappings` and `uvDiagnostics`. Atlas chart triangle indices reference this same prepared order. This is the boundary for a spatial cache or specialized receiver selection. For unwrapping alone, supply an async `AtlasProvider` via bake options; the built-in compiler validates its complete global output before building acceleration data.
 
 `SceneAdapter<Input>` defines asynchronous extraction to a `CoreScene`. `ThreeSceneAdapter` is provided. A custom adapter can run before `prepare`: `await baker.prepare(await adapter.extract(input))`.
 

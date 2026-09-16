@@ -38,7 +38,9 @@ const baker = new LightmapBaker({
 
 try {
   await baker.prepare(scene); // THREE.Object3D or a CoreScene descriptor
-  await baker.bake({ onProgress: (progress) => console.log(progress.fraction) });
+  await baker.bake({
+    onProgress: (progress) => console.log(progress.fraction),
+  });
   const result = await baker.getResult({ denoise: 'atrous', padding: true });
   const bytes = new LightmapIO().encode(result);
   // Browser: downloadBytes(bytes, 'lightmaps.tlmb'); Node: fs.writeFile(...)
@@ -52,7 +54,7 @@ try {
 - Stateful progressive rendering with pause, resume, reset, cancellation, and adaptive bounded dispatches.
 - Diffuse multi-bounce transport, next-event estimation, MIS, and emissive mesh sampling.
 - Colored point, spot, directional, rectangular and emissive lights; linear albedo/emissive texture sampling.
-- Generated planar charts or an existing global `uv1` atlas; preview resolution scaling.
+- Configurable UV channels, generate/preserve/repack modes, planar or optional xatlas shared atlases, density/padding controls, and mesh/triangle validation diagnostics.
 - Independent direct, indirect, AO, albedo, normal, position, coverage and sample-count channels.
 - Chart-aware à-trous/bilateral filters and an offline native OptiX worker.
 - SH9 probe grids with interpolation, Three.js LightProbe conversion, and JSON export.
@@ -77,3 +79,5 @@ npm pack                # distributable npm tarball
 For the browser suite, first run `npx playwright install chromium`. Native OptiX requires NVIDIA hardware and a separately installed SDK; its build instructions are in [Denoising](docs/denoising.md).
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) and [Release guide](docs/releasing.md). Repository workflows prepare CI, GitHub Pages, and npm trusted publishing; configuring and publishing the public repository/package is a maintainer action.
+
+UV coordinates must form **one shared, non-overlapping atlas across every mesh**. Use `uvMode: 'generate'` to replace independently overlapping layouts. The detached `createModel()` output carries the atlas and source-to-output corner mappings; source geometry stays unchanged. See [UV configuration](docs/configuration.md#uv-channels-and-modes) for preservation, repacking, diagnostics and optional xatlas integration.

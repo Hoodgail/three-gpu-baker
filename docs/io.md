@@ -8,7 +8,9 @@ Keep lighting data independent of any one engine's material extensions.
 import { ModelIO } from 'three-gpu-baker';
 const models = new ModelIO();
 const scene = await models.load('/assets/scene.glb');
-const fromFiles = await models.loadFiles(fileInput.files, { entry: 'scene.gltf' });
+const fromFiles = await models.loadFiles(fileInput.files, {
+  entry: 'scene.gltf',
+});
 ```
 
 GLB, glTF, and OBJ are supported for import; GLB and glTF for export. Supply `baseURL` or a `LoadingManager` for external resources. `configureLoader(loader)` lets applications attach Draco, KTX2, or Meshopt decoding to a GLTFLoader; decoded compressed/array textures still require conversion to readable static 2D pixels for transport. OBJ material-library loading is not automatic.
@@ -37,3 +39,5 @@ TLMB v1 is a lossless container: a versioned JSON channel table, little-endian t
 PFM preserves linear HDR floats with bottom-to-top rows. PNG files are tone-mapped display previews; never use them as HDR interchange. `preview(result, 'ao')` preserves the scalar AO convention. The bundle writer produces standard uncompressed ZIP32 for broad compatibility.
 
 External models and textures must be served with valid CORS headers. Animated meshes must be frozen before extraction; source transforms, instances, groups, and visibility are handled at snapshot time.
+
+With nondefault UV channels, retain the selected `TEXCOORD_n` and `metadata.lightmapUVChannel` alongside the bake. Model `userData.lightmap.texCoord` records that channel. Output mesh `userData.geometryMappings` records source mesh/geometry/instance/triangle and output vertex indices; see [mapping contracts](api.md#uv-preparation-and-geometry-mappings). The default remains `TEXCOORD_1`.
