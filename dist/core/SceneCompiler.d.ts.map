@@ -1,0 +1,1 @@
+{"version":3,"file":"SceneCompiler.d.ts","sourceRoot":"","sources":["../../src/core/SceneCompiler.ts"],"names":[],"mappings":"AAAA,OAAO,KAAK,EAAE,SAAS,EAAE,aAAa,EAAE,mBAAmB,EAAE,MAAM,aAAa,CAAC;AAKjF;;GAEG;AACH,qBAAa,aAAa;IACxB,OAAO,CAAC,KAAK,EAAE,SAAS,EAAE,OAAO,EAAE,mBAAmB,GAAG,aAAa,GAAG,OAAO,CAAC,aAAa,CAAC,CAU9F;YAEa,eAAe;CA6B9B"}

@@ -1,0 +1,127 @@
+{
+  "status": "passed",
+  "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.8010.12 Safari/537.36",
+  "webgpu": true,
+  "tests": [
+    {
+      "name": "tsl: real kernel compilation and constant-environment energy",
+      "status": "passed",
+      "milliseconds": 917.1999998092651,
+      "backend": "three-tsl-webgpu"
+    },
+    {
+      "name": "tsl: directional-light RGB energy",
+      "status": "passed",
+      "milliseconds": 923.7999999523163
+    },
+    {
+      "name": "tsl: diffuse bounce parity with CPU reference",
+      "status": "passed",
+      "milliseconds": 1321.9000000953674,
+      "linearRMSEAgainstCPU": 0.00014376921928212384,
+      "meanIndirect": 0.08174798698289076
+    },
+    {
+      "name": "tsl: reset and resumed accumulation",
+      "status": "passed",
+      "milliseconds": 926.2999999523163
+    },
+    {
+      "name": "webgpu: real kernel compilation and constant-environment energy",
+      "status": "passed",
+      "milliseconds": 928.4000000953674,
+      "backend": "webgpu"
+    },
+    {
+      "name": "webgpu: directional-light RGB energy",
+      "status": "passed",
+      "milliseconds": 930.8999998569489
+    },
+    {
+      "name": "webgpu: diffuse bounce parity with CPU reference",
+      "status": "passed",
+      "milliseconds": 1298.8999998569489,
+      "linearRMSEAgainstCPU": 0.00014376921928212384,
+      "meanIndirect": 0.08174798698289076
+    },
+    {
+      "name": "webgpu: reset and resumed accumulation",
+      "status": "passed",
+      "milliseconds": 901.5999999046326
+    },
+    {
+      "name": "tsl: mixed lights and textured bounce/emission parity",
+      "status": "passed",
+      "milliseconds": 1118.4000000953674,
+      "rmse": 0.000008628606295268801
+    },
+    {
+      "name": "tsl: million-sample request stays bounded and reports device loss",
+      "status": "passed",
+      "milliseconds": 951.6999998092651
+    },
+    {
+      "name": "webgpu: mixed lights and textured bounce/emission parity",
+      "status": "passed",
+      "milliseconds": 1137.8999998569489,
+      "rmse": 0.000008628606295268801
+    },
+    {
+      "name": "webgpu: million-sample request stays bounded and reports device loss",
+      "status": "passed",
+      "milliseconds": 1138.5
+    },
+    {
+      "name": "TSL progressive camera renders, CPU parity, indirect/AO denoising",
+      "status": "passed",
+      "milliseconds": 7169.700000047684,
+      "linearRMSEAgainstCPU": 0.0003438655717759989,
+      "rawIndirectRMSE": 0.0422676032877884,
+      "denoisedIndirectRMSE": 0.019252450609363137,
+      "dispatches": 515,
+      "lastDispatchMs": 2.3999998569488525
+    },
+    {
+      "name": "Textured GLB roundtrip preserves UVs, transforms, albedo and emission",
+      "status": "passed",
+      "milliseconds": 54.59999990463257,
+      "glbBytes": 2832,
+      "maxLinearTextureError": 0.003730595111846924
+    },
+    {
+      "name": "File-set glTF import resolves external buffers and releases temporary URLs",
+      "status": "passed",
+      "milliseconds": 3.700000047683716
+    }
+  ],
+  "errors": [],
+  "adapter": {
+    "vendor": "google",
+    "architecture": "swiftshader",
+    "device": "",
+    "description": "",
+    "features": [
+      "depth32float-stencil8",
+      "rg11b10ufloat-renderable",
+      "bgra8unorm-storage",
+      "texture-compression-bc",
+      "chromium-experimental-sampling-resource-table",
+      "core-features-and-limits",
+      "chromium-experimental-timestamp-query-inside-passes",
+      "float32-filterable",
+      "indirect-first-instance",
+      "texture-compression-astc-sliced-3d",
+      "float32-blendable",
+      "subgroup-size-control",
+      "texture-compression-unaligned",
+      "texture-compression-astc",
+      "texture-compression-etc2",
+      "depth-clip-control",
+      "texture-compression-bc-sliced-3d",
+      "clip-distances",
+      "timestamp-query",
+      "texture-component-swizzle",
+      "subgroups"
+    ]
+  }
+}
