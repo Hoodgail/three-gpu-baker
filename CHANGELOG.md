@@ -8,7 +8,7 @@
 - Expose source geometry, instance, triangle and corner mappings through preparation and detached model output; keep atlas chart references correct after BVH reordering.
 - Add procedural UV examples, CPU regressions and a real xatlas WASM browser test.
 
-## 1.0.0
+## 1.0.1
 
 Initial public API for `three-gpu-baker`.
 

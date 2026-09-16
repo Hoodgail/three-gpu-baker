@@ -1,6 +1,6 @@
 {
   "name": "three-gpu-baker",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Progressive lightmap baking for Three.js with WebGPU, diffuse global illumination, ambient occlusion and light probes.",
   "type": "module",
   "license": "MIT",
