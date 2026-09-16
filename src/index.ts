@@ -1,4 +1,8 @@
 export { LightmapBaker } from './LightmapBaker.js';
+export { UVValidationError, inspectUVs } from './core/uv.js';
+export { validateLightmapUVs } from './core/atlas.js';
+export { createXAtlasProvider } from './three/xatlas.js';
+export type { XAtlasUnwrapper } from './three/xatlas.js';
 export { denoiseSpatial } from './denoise/atrous.js';
 export * from './core/probes.js';
 export * from './io/index.js';

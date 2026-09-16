@@ -6,6 +6,35 @@ export type Vec3 = number[];
 export type Vec2 = number[];
 export type Triple<T> = T[];
 export type WrapMode = 'clamp' | 'repeat' | 'mirror';
+export type UVChannel = 0 | 1 | 2 | 3;
+export type UVMode = 'auto' | 'generate' | 'preserve' | 'repack' | 'existing';
+/** Original geometry indices in output corner order, including mirrored winding. */
+export interface GeometrySource {
+  mesh: string;
+  name?: string;
+  geometry?: string;
+  instance?: number;
+  triangle: number;
+  vertices: number[];
+}
+export interface GeometryMapping {
+  source: GeometrySource;
+  /** Index in prepared.triangles; corners retain source.vertices order. */
+  triangle: number;
+}
+export interface UVDiagnostic {
+  code:
+    'missing' | 'nonfinite' | 'out-of-range' | 'degenerate' | 'overlap' | 'padding' | 'empty-chart';
+  severity: 'error' | 'warning';
+  message: string;
+  source: GeometrySource;
+  related?: GeometrySource;
+  texel?: number[];
+}
+/** Called once with the entire scene. Return normalized UVs in input triangle/corner order. */
+export interface AtlasProvider {
+  generate(triangles: Triangle[], options: ResolvedBakeOptions): Promise<Vec2[][]>;
+}
 export interface LinearTexture {
   width: number;
   height: number;
@@ -33,6 +62,7 @@ export interface Triangle {
   material?: number;
   owner?: string;
   chart?: number;
+  source?: GeometrySource;
 }
 export interface AtlasTriangle extends Triangle {
   lmUV: Triple<Vec2>;
@@ -132,7 +162,7 @@ export interface AtlasData {
   triangles: AtlasTriangle[];
   chartCount: number;
   charts: AtlasChart[];
-  mode: 'generate' | 'existing';
+  mode: Exclude<UVMode, 'auto'>;
   padding: number;
   density?: number;
 }
@@ -167,7 +197,12 @@ export interface BakeOptions {
   samples?: number;
   bounces?: number;
   padding?: number;
-  uvMode?: 'auto' | 'generate' | 'existing';
+  uvMode?: UVMode;
+  sourceUVChannel?: UVChannel;
+  lightmapUVChannel?: UVChannel;
+  /** Pixels per world unit at the effective atlas resolution; omitted means auto-fit. */
+  texelDensity?: number;
+  atlasProvider?: AtlasProvider;
   seed?: number;
   aoDistance?: number;
   rayBias?: number;
@@ -183,8 +218,10 @@ export interface BakeOptions {
   backendFactory?: BackendFactory;
 }
 export interface ResolvedBakeOptions extends Required<
-  Omit<BakeOptions, 'renderer' | 'device' | 'backendFactory'>
+  Omit<BakeOptions, 'renderer' | 'device' | 'backendFactory' | 'texelDensity' | 'atlasProvider'>
 > {
+  texelDensity?: number;
+  atlasProvider?: AtlasProvider;
   renderer?: WebGPURenderer;
   device?: GPUDevice;
   backendFactory?: BackendFactory;
@@ -204,6 +241,8 @@ export interface PreparedScene extends TransportScene {
   triangles: AtlasTriangle[];
   atlas: AtlasData;
   gbuffer: GeometryBuffer;
+  geometryMappings: GeometryMapping[];
+  uvDiagnostics: UVDiagnostic[];
 }
 /** Implement this interface to supply a renderer or compute backend. */
 export interface BakeBackend {

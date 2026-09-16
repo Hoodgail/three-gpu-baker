@@ -3,6 +3,7 @@ import { triangleArea, length, cross } from './math.js';
 import { validateTexture } from './material.js';
 import { buildBVH } from './bvh.js';
 import { generateAtlas, rasterizeAtlas } from './atlas.js';
+import { triangleSource } from './uv.js';
 
 export function validateOptions(options: Types.BakeOptions = {}) {
   const out: Types.ResolvedBakeOptions = {
@@ -16,6 +17,8 @@ export function validateOptions(options: Types.BakeOptions = {}) {
     bounces: 2,
     padding: 2,
     uvMode: 'auto',
+    sourceUVChannel: 0,
+    lightmapUVChannel: 1,
     seed: 1337,
     aoDistance: 1,
     rayBias: 0.0001,
@@ -65,7 +68,19 @@ export function validateOptions(options: Types.BakeOptions = {}) {
   )
     throw new RangeError('Tile sizes must satisfy 1 <= min <= tile <= max <= 65536.');
   if (!['tsl', 'webgpu', 'cpu', 'auto'].includes(out.backend)) throw new Error('Unknown backend.');
-  if (!['auto', 'generate', 'existing'].includes(out.uvMode)) throw new Error('Unknown uvMode.');
+  if (!['auto', 'generate', 'existing', 'preserve', 'repack'].includes(out.uvMode))
+    throw new Error('Unknown uvMode.');
+  for (const key of ['sourceUVChannel', 'lightmapUVChannel'] as const)
+    if (![0, 1, 2, 3].includes(out[key])) throw new RangeError(`${key} must be 0..3.`);
+  if (out.sourceUVChannel === out.lightmapUVChannel)
+    throw new Error('Source and lightmap UV channels must differ.');
+  if (
+    out.texelDensity !== undefined &&
+    (!Number.isFinite(out.texelDensity) || out.texelDensity <= 0)
+  )
+    throw new RangeError('texelDensity must be finite and positive.');
+  if (out.atlasProvider && typeof out.atlasProvider.generate !== 'function')
+    throw new TypeError('atlasProvider must implement generate.');
   out.requestedWidth = out.width;
   out.requestedHeight = out.height;
   out.width = Math.max(8, Math.floor(out.width * out.resolutionScale));
@@ -164,17 +179,43 @@ export function validateScene(scene: Types.CoreScene) {
   }
 }
 
-export function prepareCoreScene(scene: Types.CoreScene, options: Types.ResolvedBakeOptions) {
+export function prepareCoreScene(
+  scene: Types.CoreScene,
+  options: Types.ResolvedBakeOptions,
+  suppliedAtlas?: Types.AtlasData,
+) {
   validateScene(scene);
-  const atlas = generateAtlas(scene.triangles, options.width, options.height, options);
+  if (
+    !suppliedAtlas &&
+    options.atlasProvider &&
+    (options.uvMode === 'generate' ||
+      options.uvMode === 'repack' ||
+      (options.uvMode === 'auto' && !scene.triangles.every((t) => t.lmUV)))
+  )
+    throw new Error('Async atlasProvider requires SceneCompiler.compile or LightmapBaker.prepare.');
+  const triangles = scene.triangles.map((t, i) => ({
+    ...t,
+    source: triangleSource(t, i),
+  }));
+  const atlas = suppliedAtlas ?? generateAtlas(triangles, options.width, options.height, options);
   const bvh = buildBVH(atlas.triangles);
+  const uvDiagnostics: Types.UVDiagnostic[] = [];
   const prepared: Types.PreparedScene = {
+    geometryMappings: bvh.triangles.map((t, triangle) => ({
+      source: triangleSource(t, bvh.originalIndices[triangle]),
+      triangle,
+    })),
+    uvDiagnostics,
     gbuffer: rasterizeAtlas(
       bvh.triangles as Types.AtlasTriangle[],
       scene.materials,
       options.width,
       options.height,
-      { conservative: atlas.mode === 'generate' },
+      {
+        conservative: atlas.mode === 'generate' && !options.atlasProvider,
+        padding: options.padding,
+        diagnostics: uvDiagnostics,
+      },
     ),
     ...scene,
     triangles: bvh.triangles as Types.AtlasTriangle[],
@@ -189,8 +230,17 @@ export function prepareCoreScene(scene: Types.CoreScene, options: Types.Resolved
   bvh.triangles.forEach((t, index) => {
     const m = scene.materials[t.material ?? 0];
     if ((m.emissive ?? [0, 0, 0]).some((c) => c * (m.emissiveIntensity ?? 1) > 0))
-      prepared.lights.push({ type: 'emissive', triangle: index, area: triangleArea(t) });
+      prepared.lights.push({
+        type: 'emissive',
+        triangle: index,
+        area: triangleArea(t),
+      });
   });
+  const sortedIndices = new Map(bvh.originalIndices.map((original, sorted) => [original, sorted]));
+  atlas.charts = atlas.charts.map((c) => ({
+    ...c,
+    triangles: c.triangles.map((i) => sortedIndices.get(i)!),
+  }));
   prepared.atlas.triangles = bvh.triangles as Types.AtlasTriangle[];
   return prepared;
 }

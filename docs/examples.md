@@ -37,6 +37,10 @@ npm run example:cpu
 
 This writes a small Cornell bake and preview under `artifacts/example/`. It demonstrates the same API without a browser or GPU. To run it after unpacking the npm package, use the documented core scene descriptor shape instead of repository example imports.
 
+## Shared UV atlas example
+
+`examples/uv-atlas.ts` creates two panels whose local `uv1` layouts overlap. `sharedAtlasExample()` regenerates one global atlas with the built-in planar packer, returning the detached model, result and source mappings. Pass absolute WASM and worker URLs to `sharedAtlasExample(wasmURL, workerURL)` to use the optional xatlas integration instead. For Vite, import `xatlasjs/dist/xatlas.wasm?url` and `xatlasjs/dist/xatlas.js?url`, resolving each against `location.href`. The browser regression in `tests/integration/uv-browser.ts` demonstrates this setup with real WASM. The application owns the optional unwrapper's worker lifetime.
+
 ## Export from the lab
 
 **Export bake bundle** downloads the detached GLB, lossless TLMB lightmap, linear PFM channels, PNG previews, and metadata. **Generate & export light probes** samples an 18-position grid and downloads radiance SH9 JSON. Probe generation uses the CPU transport implementation and reports progress.

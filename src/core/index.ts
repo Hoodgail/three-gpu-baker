@@ -1,6 +1,7 @@
 export * from './math.js';
 export * from './bvh.js';
 export * from './atlas.js';
+export * from './uv.js';
 export * from './scene.js';
 export * from './material.js';
 export * from './integrator.js';

@@ -19,11 +19,7 @@ Alternatively call `baker.generateProbes(options)` to reuse prepared BVH and mat
 ## Display and interpolation
 
 ```ts
-import {
-  createThreeLightProbe,
-  interpolateProbeGrid,
-  evaluateSHIrradiance,
-} from 'three-gpu-baker';
+import { createThreeLightProbe, interpolateProbeGrid, evaluateSHIrradiance } from 'three-gpu-baker';
 const light = await createThreeLightProbe(probes.probes[0]);
 scene.add(light);
 const coefficients = interpolateProbeGrid(probes, [0, 1, 0]);

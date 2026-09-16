@@ -82,7 +82,13 @@ export class LightmapBaker {
       this.transportBackend = null;
       let core: Types.CoreScene;
       if ('isObject3D' in input)
-        core = await (await import('./three/scene.js')).extractThreeScene(input, { signal });
+        core = await (
+          await import('./three/scene.js')
+        ).extractThreeScene(input, {
+          signal,
+          sourceUVChannel: this.options.sourceUVChannel,
+          lightmapUVChannel: this.options.lightmapUVChannel,
+        });
       else core = input;
       abortIfNeeded(signal);
       // Prevent accidental multi-gigabyte allocations before rasterization.
@@ -92,7 +98,8 @@ export class LightmapBaker {
         throw new RangeError(
           `Estimated atlas working set ${(estimate / 1048576).toFixed(0)} MiB exceeds maxMemoryMB=${budget}. Lower resolutionScale or explicitly increase the budget.`,
         );
-      this.preparedScene = this.compiler.compile(core, this.options);
+      this.preparedScene = await this.compiler.compile(core, this.options);
+      abortIfNeeded(signal);
       this.progressiveScheduler = new ProgressiveScheduler(
         this.options.width * this.options.height,
         this.options,
@@ -326,6 +333,10 @@ export class LightmapBaker {
         coverage: g.covered / n,
         denoiser: { type: 'none' },
         uvMode: this.scene.atlas.mode,
+        sourceUVChannel: this.options.sourceUVChannel,
+        lightmapUVChannel: this.options.lightmapUVChannel,
+        texelDensity: this.scene.atlas.density ?? this.options.texelDensity ?? null,
+        uvDiagnostics: structuredClone(this.scene.uvDiagnostics),
         padding: this.options.padding,
         fallbackReason: this.fallbackReason,
       },

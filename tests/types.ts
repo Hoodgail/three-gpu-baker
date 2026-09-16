@@ -5,6 +5,11 @@ import {
   type BakeProgress,
   createProbeGrid,
   createOptixDenoiser,
+  validateLightmapUVs,
+  UVValidationError,
+  createXAtlasProvider,
+  type XAtlasUnwrapper,
+  type AtlasProvider,
 } from '../src/index.js';
 const scene: CoreScene = {
   triangles: [
@@ -49,3 +54,27 @@ async function filters() {
   await denoiseSpatial(result, { channels: ['direct'] });
 }
 void filters;
+
+const provider: AtlasProvider = {
+  async generate(triangles) {
+    return triangles.map((t) => t.lmUV!);
+  },
+};
+new LightmapBaker({
+  uvMode: 'repack',
+  sourceUVChannel: 2,
+  lightmapUVChannel: 3,
+  texelDensity: 8,
+  atlasProvider: provider,
+});
+// @ts-expect-error Three supports only UV channels zero through three.
+new LightmapBaker({ sourceUVChannel: 4 });
+// @ts-expect-error UV mode names are checked.
+new LightmapBaker({ uvMode: 'unwrap' });
+const diagnostics = validateLightmapUVs(scene.triangles, 32, 32);
+const validationError = new UVValidationError(diagnostics);
+void validationError.diagnostics[0]?.source.vertices;
+function xatlas(unwrapper: XAtlasUnwrapper) {
+  return createXAtlasProvider(unwrapper);
+}
+void xatlas;

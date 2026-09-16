@@ -25,7 +25,6 @@ const navigation = [
 const app = document.querySelector<HTMLElement>('#app')!;
 app.innerHTML = /* HTML */ `<header class="site-header">
     <a class="brand" href="#">
-    
       <span>three gpu baker </span>
     </a>
     <nav aria-label="Main navigation">
@@ -38,9 +37,7 @@ app.innerHTML = /* HTML */ `<header class="site-header">
   </header>
   <main id="content"></main>
   <footer class="site-footer">
- 
     <span>Open source. MIT licensed. Built for Three.js.</span>
-   
   </footer>`;
 const content = app.querySelector<HTMLElement>('#content')!;
 let playground: Playground | undefined;

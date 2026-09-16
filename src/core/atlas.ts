@@ -7,10 +7,12 @@ interface ChartProjection {
   minY: number;
   dx: number;
   dy: number;
+  scale: number;
 }
 import type * as Types from '../types.js';
-import { sub, dot, cross, normalize, geometricNormal, mix3 } from './math.js';
+import { sub, dot, cross, normalize, geometricNormal, mix3, triangleArea } from './math.js';
 import { evaluateMaterial } from './material.js';
+import { inspectUVs, triangleSource, UVValidationError } from './uv.js';
 
 const key3 = (p: number[]) => p.map((v) => Math.round(v * 1e6)).join(',');
 const edgeKey = (a: string, b: string) => (a < b ? `${a}|${b}` : `${b}|${a}`);
@@ -69,8 +71,8 @@ function pack(
 ) {
   const rectangles = charts.map((c) => ({
     id: c.id,
-    w: Math.max(2, Math.ceil(c.dx * density)) + 2 * padding,
-    h: Math.max(2, Math.ceil(c.dy * density)) + 2 * padding,
+    w: Math.max(2, Math.ceil(c.dx * c.scale * density)) + 2 * padding,
+    h: Math.max(2, Math.ceil(c.dy * c.scale * density)) + 2 * padding,
   }));
   rectangles.sort(
     (a, b) => Math.max(b.w, b.h) - Math.max(a.w, a.h) || b.w * b.h - a.w * a.h || a.id - b.id,
@@ -109,10 +111,20 @@ function pack(
       }
       if (used.x > r.x) next.push({ x: r.x, y: r.y, w: used.x - r.x, h: r.h });
       if (used.x + used.w < r.x + r.w)
-        next.push({ x: used.x + used.w, y: r.y, w: r.x + r.w - used.x - used.w, h: r.h });
+        next.push({
+          x: used.x + used.w,
+          y: r.y,
+          w: r.x + r.w - used.x - used.w,
+          h: r.h,
+        });
       if (used.y > r.y) next.push({ x: r.x, y: r.y, w: r.w, h: used.y - r.y });
       if (used.y + used.h < r.y + r.h)
-        next.push({ x: r.x, y: used.y + used.h, w: r.w, h: r.y + r.h - used.y - used.h });
+        next.push({
+          x: r.x,
+          y: used.y + used.h,
+          w: r.w,
+          h: r.y + r.h - used.y - used.h,
+        });
     }
     free = next.filter(
       (r, i) =>
@@ -179,21 +191,30 @@ export function generateAtlas(
   {
     padding = 2,
     uvMode = 'generate',
-  }: { padding?: number; uvMode?: Types.BakeOptions['uvMode'] } = {},
+    texelDensity,
+  }: Pick<Types.BakeOptions, 'padding' | 'uvMode' | 'texelDensity'> = {},
 ) {
+  if (!triangles.length) throw new Error('Atlas generation requires triangles.');
+  if (
+    !Number.isSafeInteger(width) ||
+    !Number.isSafeInteger(height) ||
+    width < 1 ||
+    height < 1 ||
+    width > 8192 ||
+    height > 8192
+  )
+    throw new RangeError('Atlas dimensions must be integers in 1..8192.');
+  if (!Number.isSafeInteger(padding) || padding < 0 || padding > 32)
+    throw new RangeError('padding must be 0..32.');
+  if (texelDensity !== undefined && (!Number.isFinite(texelDensity) || texelDensity <= 0))
+    throw new RangeError('texelDensity must be finite and positive.');
   const result = triangles.map((t) => ({ ...t }));
   if (uvMode === 'auto') uvMode = triangles.every((t) => t.lmUV) ? 'existing' : 'generate';
-  if (uvMode === 'existing') {
-    for (const t of triangles)
-      if (
-        !t.lmUV ||
-        t.lmUV.some(
-          (uv) => uv.length !== 2 || uv.some((v) => !Number.isFinite(v) || v < 0 || v > 1),
-        )
-      )
-        throw new Error(
-          'Existing lightmap UVs must be present and within [0,1] on every triangle.',
-        );
+  if (uvMode === 'existing' || uvMode === 'preserve' || uvMode === 'repack') {
+    const diagnostics = inspectUVs(triangles, uvMode !== 'repack');
+    if (diagnostics.length) throw new UVValidationError(diagnostics);
+  }
+  if (uvMode === 'existing' || uvMode === 'preserve') {
     const groups = chartGroups(triangles, true);
     groups.forEach((g, id) => g.forEach((i) => (result[i].chart = id)));
     return {
@@ -204,8 +225,10 @@ export function generateAtlas(
       padding,
     };
   }
-  if (uvMode !== 'generate') throw new Error(`Unsupported UV mode: ${uvMode}`);
-  const groups = chartGroups(triangles);
+  if (uvMode !== 'generate' && uvMode !== 'repack')
+    throw new Error(`Unsupported UV mode: ${uvMode}`);
+  const repack = uvMode === 'repack';
+  const groups = chartGroups(triangles, repack);
   const charts = groups.map((indices, id) => {
     const seed = triangles[indices[0]],
       normal = geometricNormal(seed),
@@ -216,9 +239,10 @@ export function generateAtlas(
       maxX = -Infinity,
       maxY = -Infinity;
     for (const i of indices)
-      for (const p of triangles[i].p) {
-        const x = dot(p, u),
-          y = dot(p, v);
+      for (let k = 0; k < 3; k++) {
+        const p = triangles[i].p[k];
+        const x = repack ? triangles[i].lmUV![k][0] : dot(p, u),
+          y = repack ? triangles[i].lmUV![k][1] : dot(p, v);
         minX = Math.min(minX, x);
         minY = Math.min(minY, y);
         maxX = Math.max(maxX, x);
@@ -233,6 +257,17 @@ export function generateAtlas(
       minY,
       dx: Math.max(1e-12, maxX - minX),
       dy: Math.max(1e-12, maxY - minY),
+      scale: repack
+        ? Math.sqrt(
+            indices.reduce((s, i) => s + triangleArea(triangles[i]), 0) /
+              indices.reduce((s, i) => {
+                const [a, b, c] = triangles[i].lmUV!;
+                return (
+                  s + Math.abs((b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0])) / 2
+                );
+              }, 0),
+          )
+        : 1,
     };
   });
   if (!pack(charts, width, height, padding, 0))
@@ -240,24 +275,33 @@ export function generateAtlas(
       `${charts.length} UV charts do not fit ${width}×${height} with ${padding}px padding. Increase resolution or provide an xatlas-generated uv1 atlas.`,
     );
   let lo = 0,
-    hi = Math.sqrt((width * height) / charts.reduce((s, c) => s + c.dx * c.dy, 0)) * 2;
-  while (pack(charts, width, height, padding, hi)) hi *= 2;
-  for (let k = 0; k < 25; k++) {
-    const mid = (lo + hi) * 0.5;
-    if (pack(charts, width, height, padding, mid)) lo = mid;
-    else hi = mid;
+    hi =
+      Math.sqrt(
+        (width * height) / charts.reduce((s, c) => s + c.dx * c.dy * c.scale * c.scale, 0),
+      ) * 2;
+  if (texelDensity !== undefined) lo = texelDensity;
+  else {
+    while (pack(charts, width, height, padding, hi)) hi *= 2;
+    for (let k = 0; k < 25; k++) {
+      const mid = (lo + hi) * 0.5;
+      if (pack(charts, width, height, padding, mid)) lo = mid;
+      else hi = mid;
+    }
   }
   const placed = pack(charts, width, height, padding, lo);
-  if (!placed) throw new Error('Atlas packing failed.');
+  if (!placed)
+    throw new Error(
+      'Atlas packing failed at requested texelDensity. Increase resolution or lower density/padding.',
+    );
   for (const c of charts) {
     const r = placed[c.id],
       iw = r.w - 2 * padding,
       ih = r.h - 2 * padding;
     for (const i of c.indices) {
       result[i].chart = c.id;
-      result[i].lmUV = triangles[i].p.map((p) => {
-        const x = (dot(p, c.u) - c.minX) / c.dx,
-          y = (dot(p, c.v) - c.minY) / c.dy;
+      result[i].lmUV = triangles[i].p.map((p, k) => {
+        const x = ((repack ? triangles[i].lmUV![k][0] : dot(p, c.u)) - c.minX) / c.dx,
+          y = ((repack ? triangles[i].lmUV![k][1] : dot(p, c.v)) - c.minY) / c.dy;
         return [
           (r.x + padding + (r.rotate ? 1 - y : x) * iw) / width,
           (r.y + padding + (r.rotate ? x : y) * ih) / height,
@@ -268,7 +312,11 @@ export function generateAtlas(
   return {
     triangles: result as Types.AtlasTriangle[],
     chartCount: charts.length,
-    charts: charts.map((c) => ({ id: c.id, rect: placed![c.id], triangles: c.indices })),
+    charts: charts.map((c) => ({
+      id: c.id,
+      rect: placed![c.id],
+      triangles: c.indices,
+    })),
     mode: uvMode,
     padding,
     density: lo,
@@ -281,8 +329,20 @@ export function rasterizeAtlas(
   materials: Types.DiffuseMaterial[],
   width: number,
   height: number,
-  { conservative = false }: { conservative?: boolean } = {},
+  {
+    conservative = false,
+    padding = 0,
+    diagnostics = [],
+  }: {
+    conservative?: boolean;
+    padding?: number;
+    diagnostics?: Types.UVDiagnostic[];
+  } = {},
 ) {
+  const invalid = inspectUVs(triangles);
+  if (invalid.length) throw new UVValidationError(invalid);
+  const errors: Types.UVDiagnostic[] = [];
+  const overlapPairs = new Set<string>();
   const size = width * height;
   const positions = new Float32Array(size * 3),
     normals = new Float32Array(size * 3),
@@ -298,7 +358,6 @@ export function rasterizeAtlas(
     const uv = t.lmUV.map((p) => [p[0] * width, p[1] * height]);
     const [a, b, c] = uv,
       den = (b[1] - c[1]) * (a[0] - c[0]) + (c[0] - b[0]) * (a[1] - c[1]);
-    if (Math.abs(den) < 1e-10) throw new Error(`Degenerate lightmap UV triangle ${triangle}.`);
     const minX = Math.max(0, Math.floor(Math.min(a[0], b[0], c[0]))),
       maxX = Math.min(width - 1, Math.ceil(Math.max(a[0], b[0], c[0])));
     const minY = Math.max(0, Math.floor(Math.min(a[1], b[1], c[1]))),
@@ -316,10 +375,21 @@ export function rasterizeAtlas(
         const index = y * width + x,
           w = [w0, w1, w2];
         if (coverage[index]) {
-          if (charts[index] !== t.chart || (edge > 1e-5 && interior[index] > 1e-5))
-            throw new Error(
-              `Overlapping lightmap UVs at texel (${x}, ${y}). A single global non-overlapping uv1 atlas is required.`,
-            );
+          if (charts[index] !== t.chart || (edge > 1e-5 && interior[index] > 1e-5)) {
+            const previous = triangleIds[index],
+              key = `${previous}:${triangle}`;
+            if (!overlapPairs.has(key)) {
+              overlapPairs.add(key);
+              errors.push({
+                code: 'overlap',
+                severity: 'error',
+                source: triangleSource(t, triangle),
+                related: triangleSource(triangles[previous], previous),
+                texel: [x, y],
+                message: `Overlapping lightmap UVs at texel (${x}, ${y}). A single global non-overlapping atlas is required.`,
+              });
+            }
+          }
           if (edge <= interior[index]) continue;
         } else covered++;
         coverage[index] = 1;
@@ -373,10 +443,56 @@ export function rasterizeAtlas(
         break;
       }
     }
-  if (missing.length)
-    throw new Error(
-      `${missing.length} UV charts have no covered texels. Increase atlas resolution.`,
-    );
+  for (const chart of missing) {
+    const i = triangles.findIndex((t) => t.chart === chart);
+    errors.push({
+      code: 'empty-chart',
+      severity: 'error',
+      source: triangleSource(triangles[i], i),
+      message: `UV chart ${chart} has no covered texels. Increase atlas resolution.`,
+    });
+  }
+  if (errors.length) throw new UVValidationError(errors);
+  // Multi-source gutter growth reports chart collisions in O(padding * pixels).
+  let owners = triangleIds.slice();
+  const nearby = new Set<string>();
+  for (let step = 0; step < padding; step++) {
+    const next = owners.slice();
+    for (let y = 0; y < height; y++)
+      for (let x = 0; x < width; x++) {
+        const i = y * width + x;
+        for (const [dx, dy] of [
+          [-1, 0],
+          [1, 0],
+          [0, -1],
+          [0, 1],
+        ]) {
+          const xx = x + dx,
+            yy = y + dy;
+          if (xx < 0 || yy < 0 || xx >= width || yy >= height) continue;
+          const other = owners[yy * width + xx];
+          if (other < 0) continue;
+          if (next[i] < 0) next[i] = other;
+          else if (triangles[next[i]].chart !== triangles[other].chart) {
+            const a = next[i],
+              b = other;
+            const key = [triangles[a].chart, triangles[b].chart].sort((a, b) => a - b).join(':');
+            if (!nearby.has(key)) {
+              nearby.add(key);
+              diagnostics.push({
+                code: 'padding',
+                severity: 'warning',
+                source: triangleSource(triangles[a], a),
+                related: triangleSource(triangles[b], b),
+                texel: [x, y],
+                message: `UV charts have less than ${2 * padding}px of rasterized gutter separation.`,
+              });
+            }
+          }
+        }
+      }
+    owners = next;
+  }
   if (!covered) throw new Error('The atlas has no covered texels.');
   return {
     width,
@@ -391,6 +507,44 @@ export function rasterizeAtlas(
     covered,
     conservativeCharts,
   };
+}
+
+/** Inspect a shared atlas without baking. Padding is advisory for compatibility. */
+export function validateLightmapUVs(
+  triangles: Types.Triangle[],
+  width: number,
+  height: number,
+  padding = 2,
+): Types.UVDiagnostic[] {
+  if (
+    !Number.isSafeInteger(width) ||
+    !Number.isSafeInteger(height) ||
+    width < 1 ||
+    height < 1 ||
+    width > 8192 ||
+    height > 8192
+  )
+    throw new RangeError('Validation dimensions must be integers in 1..8192.');
+  if (!Number.isSafeInteger(padding) || padding < 0 || padding > 32)
+    throw new RangeError('padding must be 0..32.');
+  if (!triangles.length) return [];
+  const diagnostics: Types.UVDiagnostic[] = [];
+  try {
+    const atlas = generateAtlas(triangles, width, height, {
+      uvMode: 'preserve',
+    });
+    rasterizeAtlas(
+      atlas.triangles.map((t) => ({ ...t, material: 0 })),
+      [{}],
+      width,
+      height,
+      { padding, diagnostics },
+    );
+  } catch (error) {
+    if (!(error instanceof UVValidationError)) throw error;
+    diagnostics.push(...error.diagnostics);
+  }
+  return diagnostics;
 }
 
 /** Copy edge texels into gutters without changing the authoritative coverage mask. */

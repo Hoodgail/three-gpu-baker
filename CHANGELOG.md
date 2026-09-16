@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+- Add configurable source/lightmap UV channels (defaults remain `uv`/`uv1`), explicit `generate`, `preserve` and `repack` modes; retain `auto` and `existing` compatibility.
+- Add fixed world-space texel density, shared multi-mesh packing, and an optional async xatlas-three adapter with no mandatory WASM dependency.
+- Report structured mesh/triangle diagnostics for missing, nonfinite, out-of-range, degenerate, overlapping and empty-chart UVs, plus advisory gutter warnings.
+- Expose source geometry, instance, triangle and corner mappings through preparation and detached model output; keep atlas chart references correct after BVH reordering.
+- Add procedural UV examples, CPU regressions and a real xatlas WASM browser test.
+
 ## 1.0.0
 
 Initial public API for `three-gpu-baker`.

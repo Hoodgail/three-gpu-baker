@@ -123,7 +123,7 @@ export async function runVisualTests(run) {
         ['tsl-64spp', r],
         ['cpu-64spp', ref],
       ])
-        for (const channel of ['lightmap', 'indirect', 'ao'])
+        for (const channel of ['lightmap', 'direct', 'indirect', 'ao'])
           atlas(value, channel, `${prefix}-${channel}.png`);
       const rmse = (a, c) => {
         let sum = 0,
